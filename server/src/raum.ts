@@ -51,6 +51,7 @@ export class Raum {
           const id = crypto.randomUUID();
           zustand = spielerHinzufuegen(zustand, id, String(nachricht.name ?? ''));
           ws.serializeAttachment({ id } satisfies Anhang);
+          ws.send(JSON.stringify({ typ: 'willkommen', id }));
           break;
         }
         case 'start':
