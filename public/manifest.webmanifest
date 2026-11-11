@@ -1,0 +1,12 @@
+{
+  "name": "Minigame-Clash",
+  "short_name": "Minigame-Clash",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14161f",
+  "theme_color": "#14161f",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

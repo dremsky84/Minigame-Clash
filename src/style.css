@@ -1,0 +1,28 @@
+:root {
+  color-scheme: dark;
+  --bg: #14161f;
+  --text: #f2f2f2;
+  --accent: #f3a712;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  min-height: 100dvh;
+}
+
+main {
+  padding: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+h1 {
+  color: var(--accent);
+}
+
+.zug {
+  opacity: 0.8;
+}
