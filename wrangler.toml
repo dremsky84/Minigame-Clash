@@ -1,0 +1,12 @@
+name = "minigame-clash-server"
+main = "server/src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[durable_objects.bindings]]
+name = "RAUM"
+class_name = "Raum"
+
+# Free-Tarif: Durable Objects nur mit SQLite-Speicher.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Raum"]

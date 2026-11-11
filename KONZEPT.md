@@ -55,7 +55,7 @@ Wie bei Gildenstadt und No Risk No Fun:
 
 Neu gegenüber den Vorlagen, weil es online läuft:
 - **Spielregeln auf dem Server:** Der Server führt den Spielzustand. Die Handys zeigen nur an und senden Eingaben. So lässt sich nicht schummeln, und alle sehen denselben Stand.
-- **Transport: WebSocket-Server.** Kostenloser Tarif, z. B. PartyKit oder Cloudflare Durable Objects. Braucht ein Konto und gegebenenfalls einen Schlüssel. Die Auswahl des Anbieters steht noch aus.
+- **Transport: Cloudflare Workers mit Durable Objects.** Ein Worker nimmt WebSocket-Verbindungen an und leitet sie an ein Durable Object pro Raumcode weiter. Das Objekt führt die Spielregeln aus und hält den Zustand. Free-Tarif mit SQLite-Speicher. Deploy per GitHub Action bei Push auf `main`, Zugangsdaten als Secrets im Repo.
 - **Gemeinsame Spiellogik:** Die Regeln liegen als reine TypeScript-Module vor, die Server und Client gleich nutzen. Das macht sie testbar.
 - **Tests:** Vitest für die Regeln. Playwright startet vier Browser-Kontexte als vier Handys und testet eine ganze Partie Ende zu Ende.
 
@@ -72,7 +72,6 @@ Neu gegenüber den Vorlagen, weil es online läuft:
 
 ## Offene Punkte
 
-- Anbieter für den WebSocket-Server (PartyKit oder Cloudflare Durable Objects).
 - Ist „Minigame-Clash“ auch der endgültige Titel?
 - Minispiel-Liste bestätigen oder ändern.
 - Anzahl Spieler: 2 bis 6 (Standard 4) so lassen?
