@@ -1,9 +1,15 @@
-// Ein Durable Object pro Raum. Hält den Spielzustand und die WebSocket-Verbindungen der Handys.
-// Hibernation-API: Das Objekt schläft, wenn keine Nachrichten kommen, und kostet dann keine Laufzeit.
+// Ein Durable Object pro Raum: hält den Spielzustand und die WebSocket-Verbindungen der Handys.
+// Hibernation-API: Das Objekt schläft zwischen Nachrichten. Die Abmeldefrist läuft über einen Alarm.
 import {
+  abmelden,
+  aktualisiereBots,
+  botsSpielenZuege,
   leererRaum,
+  naechsteAbmeldefrist,
   spielerHinzufuegen,
   starteSpiel,
+  stimmeUeberspringen,
+  wiederverbinden,
   zugBeenden,
   type Raumzustand,
 } from '../../src/core/spiel';
@@ -17,8 +23,10 @@ interface Anhang {
 
 type Nachricht =
   | { typ: 'beitreten'; name: string }
+  | { typ: 'wiederbeitreten'; id: string }
   | { typ: 'start' }
-  | { typ: 'zug' };
+  | { typ: 'zug' }
+  | { typ: 'warten_ueberspringen' };
 
 export class Raum {
   constructor(
@@ -45,36 +53,89 @@ export class Raum {
     }
 
     try {
+      const jetzt = Date.now();
       let zustand = await this.lade();
       switch (nachricht.typ) {
         case 'beitreten': {
           const id = crypto.randomUUID();
           zustand = spielerHinzufuegen(zustand, id, String(nachricht.name ?? ''));
-          ws.serializeAttachment({ id } satisfies Anhang);
-          ws.send(JSON.stringify({ typ: 'willkommen', id }));
+          this.bindeAn(ws, id);
+          break;
+        }
+        case 'wiederbeitreten': {
+          const id = String(nachricht.id ?? '');
+          zustand = wiederverbinden(zustand, id);
+          this.bindeAn(ws, id);
           break;
         }
         case 'start':
           zustand = starteSpiel(zustand);
           break;
-        case 'zug': {
-          const anhang = ws.deserializeAttachment() as Anhang | null;
-          if (!anhang) return this.fehler(ws, 'Erst beitreten.');
-          zustand = zugBeenden(zustand, anhang.id);
+        case 'zug':
+          zustand = zugBeenden(zustand, this.eigeneId(ws));
           break;
-        }
+        case 'warten_ueberspringen':
+          zustand = stimmeUeberspringen(zustand, this.eigeneId(ws));
+          break;
         default:
           return this.fehler(ws, 'Unbekannter Nachrichtentyp.');
       }
+      zustand = this.fertig(zustand, jetzt);
       await this.speichere(zustand);
+      await this.planeAlarm(zustand);
       this.sendeAlle(zustand);
     } catch (fehler) {
       this.fehler(ws, fehler instanceof Error ? fehler.message : 'Unbekannter Fehler.');
     }
   }
 
-  webSocketClose(ws: WebSocket, code: number, grund: string): void {
-    ws.close(code, grund);
+  async webSocketClose(ws: WebSocket, code: number, grund: string): Promise<void> {
+    try {
+      ws.close(code, grund);
+    } catch {
+      // Die Verbindung ist schon geschlossen.
+    }
+    const anhang = ws.deserializeAttachment() as Anhang | null;
+    // Hat der Spieler schon eine neue Verbindung (z. B. nach einem Neuladen), bleibt er verbunden.
+    if (!anhang || this.hatAndereVerbindung(anhang.id, ws)) return;
+
+    const jetzt = Date.now();
+    let zustand = await this.lade();
+    zustand = this.fertig(abmelden(zustand, anhang.id, jetzt), jetzt);
+    await this.speichere(zustand);
+    await this.planeAlarm(zustand);
+    this.sendeAlle(zustand, ws);
+  }
+
+  /** Läuft die Abmeldefrist ab, übernehmen Bots die Plätze. */
+  async alarm(): Promise<void> {
+    const zustand = this.fertig(await this.lade(), Date.now());
+    await this.speichere(zustand);
+    await this.planeAlarm(zustand);
+    this.sendeAlle(zustand);
+  }
+
+  private bindeAn(ws: WebSocket, id: string): void {
+    ws.serializeAttachment({ id } satisfies Anhang);
+    ws.send(JSON.stringify({ typ: 'willkommen', id }));
+  }
+
+  private eigeneId(ws: WebSocket): string {
+    const anhang = ws.deserializeAttachment() as Anhang | null;
+    if (!anhang) throw new Error('Erst beitreten.');
+    return anhang.id;
+  }
+
+  private hatAndereVerbindung(id: string, ausser: WebSocket): boolean {
+    return this.state.getWebSockets().some((other) => {
+      if (other === ausser) return false;
+      const anhang = other.deserializeAttachment() as Anhang | null;
+      return anhang?.id === id;
+    });
+  }
+
+  private fertig(zustand: Raumzustand, jetzt: number): Raumzustand {
+    return botsSpielenZuege(aktualisiereBots(zustand, jetzt));
   }
 
   private async lade(): Promise<Raumzustand> {
@@ -85,10 +146,25 @@ export class Raum {
     await this.state.storage.put(SCHLUESSEL, zustand);
   }
 
-  private sendeAlle(zustand: Raumzustand): void {
+  private async planeAlarm(zustand: Raumzustand): Promise<void> {
+    const frist = naechsteAbmeldefrist(zustand);
+    if (frist === null) {
+      await this.state.storage.deleteAlarm();
+    } else {
+      await this.state.storage.setAlarm(frist);
+    }
+  }
+
+  /** Schickt den Stand an alle offenen Verbindungen. Eine kaputte Verbindung stoppt die anderen nicht. */
+  private sendeAlle(zustand: Raumzustand, ausser?: WebSocket): void {
     const text = JSON.stringify({ typ: 'zustand', daten: zustand });
     for (const ws of this.state.getWebSockets()) {
-      ws.send(text);
+      if (ws === ausser) continue;
+      try {
+        ws.send(text);
+      } catch {
+        // Die Verbindung ist gerade geschlossen worden.
+      }
     }
   }
 

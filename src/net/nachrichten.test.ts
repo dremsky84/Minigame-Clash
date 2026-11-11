@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { parseServerbotschaft } from './nachrichten';
 
-const zustand = { spieler: [{ id: 'a', name: 'Anna', istBot: false }], gestartet: false, aktuell: 0 };
+const zustand = {
+  spieler: [{ id: 'a', name: 'Anna', istBot: false, verbunden: true, abgemeldetSeit: null }],
+  gestartet: false,
+  aktuell: 0,
+  warteStimmen: [],
+};
 
 describe('parseServerbotschaft', () => {
   it('liest willkommen, zustand und fehler', () => {
